@@ -1,126 +1,121 @@
-import React, { useState, useEffect } from 'react'
-import { doc, onSnapshot, updateDoc, setDoc, getDoc } from 'firebase/firestore'
+import React, { useEffect, useState } from 'react'
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
-export default function CharacterSheet({ roomId, userId, isMaster, players }) {
-  const [selectedUid, setSelectedUid] = useState(userId)
-  const [character, setCharacter] = useState({
-    name: '',
-    level: 1,
-    body: 1,
-    spirit: 1,
-    mind: 1,
-    lr: 2,
-    os: 0,
-    armor: 0,
-    aspects: [],
-    wounds: { light: [], medium: [], heavy: [] },
-    abilities: ['Усиление', 'Возможность']
-  })
+const createDefaultCharacter = (player) => ({
+  name: player?.characterName || player?.email?.split('@')[0] || 'Безымянный',
+  level: 1,
+  body: 1,
+  spirit: 1,
+  mind: 1,
+  lr: 2,
+  os: 0,
+  armor: 0,
+  aspects: [],
+  wounds: { light: [], medium: [], heavy: [] },
+  abilities: ['Усиление', 'Возможность']
+})
+
+export default function CharacterSheet({ roomId, userId, isMaster, players, selectedUid, onCharacterNameChange }) {
+  const [character, setCharacter] = useState(createDefaultCharacter())
+  const [originalCharacter, setOriginalCharacter] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
-  // При смене selectedUid загружаем данные
   useEffect(() => {
-    if (!roomId || !selectedUid) return
+    if (!roomId || !selectedUid) {
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
+    const player = players.find(item => item.uid === selectedUid)
     const charRef = doc(db, 'rooms', roomId, 'characters', selectedUid)
+
     const unsub = onSnapshot(charRef, (docSnap) => {
       if (docSnap.exists()) {
-        setCharacter(docSnap.data())
+        setCharacter({ ...createDefaultCharacter(player), ...docSnap.data() })
       } else {
-        // Если документа нет — создаём с дефолтными значениями
-        const defaultChar = {
-          name: players.find(p => p.uid === selectedUid)?.email?.split('@')[0] || 'Безымянный',
-          level: 1,
-          body: 1,
-          spirit: 1,
-          mind: 1,
-          lr: 2,
-          os: 0,
-          armor: 0,
-          aspects: [],
-          wounds: { light: [], medium: [], heavy: [] },
-          abilities: ['Усиление', 'Возможность']
-        }
-        setCharacter(defaultChar)
-        // Создаём документ в Firestore
-        setDoc(charRef, defaultChar)
+        const defaultCharacter = createDefaultCharacter(player)
+        setCharacter(defaultCharacter)
+        setDoc(charRef, defaultCharacter)
       }
       setIsLoading(false)
     })
+
     return () => unsub()
   }, [roomId, selectedUid, players])
 
-  const handleSave = async () => {
-    const charRef = doc(db, 'rooms', roomId, 'characters', selectedUid)
-    await updateDoc(charRef, character)
-    setIsEditing(false)
-  }
+  const canEdit = Boolean(selectedUid) && (isMaster || selectedUid === userId)
 
-  const addAspect = () => {
-    const newAspect = prompt('Введите новый аспект:')
-    if (newAspect) {
-      setCharacter({ ...character, aspects: [...character.aspects, newAspect] })
-    }
-  }
-
-  const canEdit = isMaster || (selectedUid === userId)
-
-  // Если игрок пытается редактировать чужой лист — блокируем
-  const handleEditToggle = () => {
+  const startEditing = () => {
     if (!canEdit) {
       alert('Вы не можете редактировать этот лист')
       return
     }
-    setIsEditing(!isEditing)
+    setOriginalCharacter(structuredClone(character))
+    setIsEditing(true)
   }
 
-  // Переключение между игроками (только для мастера)
-  const handlePlayerSelect = (uid) => {
-    if (isMaster) {
-      setSelectedUid(uid)
+  const cancelEditing = () => {
+    if (originalCharacter) setCharacter(originalCharacter)
+    setIsEditing(false)
+    setOriginalCharacter(null)
+  }
+
+  const handleSave = async () => {
+    if (!selectedUid) return
+    const charRef = doc(db, 'rooms', roomId, 'characters', selectedUid)
+    const savedCharacter = { ...character, name: character.name.trim() || 'Безымянный' }
+
+    await updateDoc(charRef, savedCharacter)
+    onCharacterNameChange?.(selectedUid, savedCharacter.name)
+    setCharacter(savedCharacter)
+    setIsEditing(false)
+    setOriginalCharacter(null)
+  }
+
+  const addAspect = () => {
+    const newAspect = prompt('Введите новый аспект:')
+    if (newAspect?.trim()) {
+      setCharacter({ ...character, aspects: [...(character.aspects || []), newAspect.trim()] })
     }
   }
 
+  if (!selectedUid && isMaster) {
+    return (
+      <div className="bg-gray-800/80 backdrop-blur p-6 rounded-2xl border border-purple-500/20 shadow-xl text-gray-300">
+        В комнате пока нет игроков. Их персонажи появятся здесь после присоединения.
+      </div>
+    )
+  }
+
   if (isLoading) return <div className="text-gray-400">Загрузка листа...</div>
+
+  const wounds = character.wounds || { light: [], medium: [], heavy: [] }
 
   return (
     <div className="bg-gray-800/80 backdrop-blur p-6 rounded-2xl border border-purple-500/20 shadow-xl">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-white">📜 Лист персонажа</h2>
-        <div className="flex gap-2">
-          {isMaster && (
-            <select
-              value={selectedUid}
-              onChange={(e) => handlePlayerSelect(e.target.value)}
-              className="bg-gray-700 text-white px-2 py-1 rounded-lg text-sm"
-            >
-              {players.map(p => (
-                <option key={p.uid} value={p.uid}>
-                  {p.email?.split('@')[0] || 'Аноним'} {p.role === 'master' ? '(Мастер)' : ''}
-                </option>
-              ))}
-            </select>
-          )}
+        {isEditing ? (
+          <button onClick={cancelEditing} className="px-4 py-1 rounded-lg text-white transition bg-gray-600 hover:bg-gray-500">
+            Отмена
+          </button>
+        ) : (
           <button
-            onClick={handleEditToggle}
+            onClick={startEditing}
             className={`px-4 py-1 rounded-lg text-white transition ${canEdit ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 cursor-not-allowed'}`}
             disabled={!canEdit}
           >
-            {isEditing ? 'Отмена' : 'Редактировать'}
+            Редактировать
           </button>
-        </div>
+        )}
       </div>
 
       {isEditing ? (
         <div className="space-y-3">
-          <input
-            value={character.name}
-            onChange={(e) => setCharacter({ ...character, name: e.target.value })}
-            placeholder="Имя"
-            className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-          />
+          <input value={character.name} onChange={(e) => setCharacter({ ...character, name: e.target.value })} placeholder="Имя" className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white" />
           <div className="grid grid-cols-3 gap-2">
             <label>Тело: <input type="number" min="1" max="5" value={character.body} onChange={(e) => setCharacter({ ...character, body: +e.target.value })} className="w-full px-2 py-1 bg-gray-700 rounded text-white" /></label>
             <label>Дух: <input type="number" min="1" max="5" value={character.spirit} onChange={(e) => setCharacter({ ...character, spirit: +e.target.value })} className="w-full px-2 py-1 bg-gray-700 rounded text-white" /></label>
@@ -150,15 +145,15 @@ export default function CharacterSheet({ roomId, userId, isMaster, players }) {
           <div>
             <p className="font-semibold">Аспекты:</p>
             <ul className="list-disc list-inside text-sm">
-              {character.aspects.map((a, i) => <li key={i}>{a}</li>)}
+              {(character.aspects || []).map((aspect, index) => <li key={index}>{aspect}</li>)}
             </ul>
           </div>
           <div>
             <p className="font-semibold">Травмы:</p>
             <div className="text-sm">
-              <span className="text-green-400">Лёгкие: {character.wounds.light.length}</span>
-              <span className="text-yellow-400 ml-3">Средние: {character.wounds.medium.length}</span>
-              <span className="text-red-400 ml-3">Тяжёлые: {character.wounds.heavy.length}</span>
+              <span className="text-green-400">Лёгкие: {wounds.light?.length || 0}</span>
+              <span className="text-yellow-400 ml-3">Средние: {wounds.medium?.length || 0}</span>
+              <span className="text-red-400 ml-3">Тяжёлые: {wounds.heavy?.length || 0}</span>
             </div>
           </div>
         </div>

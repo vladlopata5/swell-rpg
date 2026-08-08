@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, getDocs, addDoc, query, where, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, doc, getDoc } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 
 export default function RoomSelector() {
@@ -10,23 +10,22 @@ export default function RoomSelector() {
   const navigate = useNavigate()
   const user = auth.currentUser
 
-  // Загружаем список комнат
   useEffect(() => {
     const fetchRooms = async () => {
       const snapshot = await getDocs(collection(db, 'rooms'))
-      const roomsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      setRooms(roomsList)
+      setRooms(snapshot.docs.map(room => ({ id: room.id, ...room.data() })))
     }
     fetchRooms()
   }, [])
 
-  // Создать новую комнату
   const createRoom = async () => {
     if (!newRoomName.trim() || !user) return
+
     const docRef = await addDoc(collection(db, 'rooms'), {
-      name: newRoomName,
+      name: newRoomName.trim(),
       creatorUid: user.uid,
-      players: [{ uid: user.uid, email: user.email, role: 'master' }],
+      creatorEmail: user.email,
+      players: [],
       sceneTrackers: [],
       bgImage: '',
       createdAt: new Date()
@@ -34,27 +33,18 @@ export default function RoomSelector() {
     navigate(`/lobby/${docRef.id}`)
   }
 
-  // Присоединиться по ID
   const joinRoom = async () => {
     if (!joinRoomId.trim() || !user) return
-    // Проверяем, существует ли комната
-    const roomRef = doc(db, 'rooms', joinRoomId)
+
+    const roomRef = doc(db, 'rooms', joinRoomId.trim())
     const roomSnap = await getDoc(roomRef)
     if (!roomSnap.exists()) {
       alert('Комната не найдена')
       return
     }
-    // Добавляем игрока в players (если ещё не добавлен)
-    const roomData = roomSnap.data()
-    const players = roomData.players || []
-    const alreadyIn = players.some(p => p.uid === user.uid)
-    if (!alreadyIn) {
-      // Обновим позже, пока просто переходим
-    }
-    navigate(`/lobby/${joinRoomId}`)
+    navigate(`/lobby/${joinRoomId.trim()}`)
   }
 
-  // Получить имя пользователя (до @)
   const getUserName = (email) => email ? email.split('@')[0] : 'Аноним'
 
   return (
@@ -68,7 +58,6 @@ export default function RoomSelector() {
         </div>
         <p className="text-center text-gray-400 mb-6">Создайте новую или присоединитесь к существующей</p>
 
-        {/* Создание комнаты */}
         <div className="mb-6 p-4 bg-gray-700/50 rounded-xl">
           <h3 className="text-lg font-semibold text-white mb-2">Создать новую комнату</h3>
           <div className="flex gap-2">
@@ -79,16 +68,12 @@ export default function RoomSelector() {
               placeholder="Название комнаты"
               className="flex-1 px-4 py-2 bg-gray-600 border border-gray-500 rounded-lg text-white focus:outline-none focus:border-purple-500"
             />
-            <button
-              onClick={createRoom}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold transition"
-            >
+            <button onClick={createRoom} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold transition">
               Создать
             </button>
           </div>
         </div>
 
-        {/* Присоединение по ID */}
         <div className="mb-6 p-4 bg-gray-700/50 rounded-xl">
           <h3 className="text-lg font-semibold text-white mb-2">Присоединиться по ID</h3>
           <div className="flex gap-2">
@@ -99,16 +84,12 @@ export default function RoomSelector() {
               placeholder="Введите ID комнаты"
               className="flex-1 px-4 py-2 bg-gray-600 border border-gray-500 rounded-lg text-white focus:outline-none focus:border-purple-500"
             />
-            <button
-              onClick={joinRoom}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold transition"
-            >
+            <button onClick={joinRoom} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold transition">
               Присоединиться
             </button>
           </div>
         </div>
 
-        {/* Список существующих комнат */}
         <div>
           <h3 className="text-lg font-semibold text-white mb-2">Существующие комнаты</h3>
           {rooms.length === 0 ? (
@@ -123,7 +104,7 @@ export default function RoomSelector() {
                   >
                     <span>{room.name || 'Без названия'}</span>
                     <span className="text-sm text-gray-400">
-                      {room.creatorUid ? `Создатель: ${getUserName(room.creatorEmail || '')}` : ''} • {room.players?.length || 0} игроков
+                      {room.creatorUid ? `Создатель: ${getUserName(room.creatorEmail || '')}` : ''} • {room.players?.filter(player => player.uid !== room.creatorUid && player.role !== 'master').length || 0} игроков
                     </span>
                   </button>
                 </li>

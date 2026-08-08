@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, setDoc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
-export default function CharacterSheet({ roomId }) {
+export default function CharacterSheet({ roomId, userId, isMaster, players }) {
+  const [selectedUid, setSelectedUid] = useState(userId)
   const [character, setCharacter] = useState({
     name: '',
     level: 1,
@@ -17,17 +18,43 @@ export default function CharacterSheet({ roomId }) {
     abilities: ['Усиление', 'Возможность']
   })
   const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
+  // При смене selectedUid загружаем данные
   useEffect(() => {
-    // В реальности тут должен быть ID персонажа, но для демо используем фиксированный
-    const unsub = onSnapshot(doc(db, 'rooms', roomId, 'characters', 'player1'), (doc) => {
-      if (doc.exists()) setCharacter(doc.data())
+    if (!roomId || !selectedUid) return
+    setIsLoading(true)
+    const charRef = doc(db, 'rooms', roomId, 'characters', selectedUid)
+    const unsub = onSnapshot(charRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setCharacter(docSnap.data())
+      } else {
+        // Если документа нет — создаём с дефолтными значениями
+        const defaultChar = {
+          name: players.find(p => p.uid === selectedUid)?.email?.split('@')[0] || 'Безымянный',
+          level: 1,
+          body: 1,
+          spirit: 1,
+          mind: 1,
+          lr: 2,
+          os: 0,
+          armor: 0,
+          aspects: [],
+          wounds: { light: [], medium: [], heavy: [] },
+          abilities: ['Усиление', 'Возможность']
+        }
+        setCharacter(defaultChar)
+        // Создаём документ в Firestore
+        setDoc(charRef, defaultChar)
+      }
+      setIsLoading(false)
     })
     return () => unsub()
-  }, [roomId])
+  }, [roomId, selectedUid, players])
 
   const handleSave = async () => {
-    await updateDoc(doc(db, 'rooms', roomId, 'characters', 'player1'), character)
+    const charRef = doc(db, 'rooms', roomId, 'characters', selectedUid)
+    await updateDoc(charRef, character)
     setIsEditing(false)
   }
 
@@ -38,16 +65,52 @@ export default function CharacterSheet({ roomId }) {
     }
   }
 
+  const canEdit = isMaster || (selectedUid === userId)
+
+  // Если игрок пытается редактировать чужой лист — блокируем
+  const handleEditToggle = () => {
+    if (!canEdit) {
+      alert('Вы не можете редактировать этот лист')
+      return
+    }
+    setIsEditing(!isEditing)
+  }
+
+  // Переключение между игроками (только для мастера)
+  const handlePlayerSelect = (uid) => {
+    if (isMaster) {
+      setSelectedUid(uid)
+    }
+  }
+
+  if (isLoading) return <div className="text-gray-400">Загрузка листа...</div>
+
   return (
     <div className="bg-gray-800/80 backdrop-blur p-6 rounded-2xl border border-purple-500/20 shadow-xl">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-white">📜 Лист персонажа</h2>
-        <button
-          onClick={() => setIsEditing(!isEditing)}
-          className="px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition"
-        >
-          {isEditing ? 'Отмена' : 'Редактировать'}
-        </button>
+        <div className="flex gap-2">
+          {isMaster && (
+            <select
+              value={selectedUid}
+              onChange={(e) => handlePlayerSelect(e.target.value)}
+              className="bg-gray-700 text-white px-2 py-1 rounded-lg text-sm"
+            >
+              {players.map(p => (
+                <option key={p.uid} value={p.uid}>
+                  {p.email?.split('@')[0] || 'Аноним'} {p.role === 'master' ? '(Мастер)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={handleEditToggle}
+            className={`px-4 py-1 rounded-lg text-white transition ${canEdit ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 cursor-not-allowed'}`}
+            disabled={!canEdit}
+          >
+            {isEditing ? 'Отмена' : 'Редактировать'}
+          </button>
+        </div>
       </div>
 
       {isEditing ? (

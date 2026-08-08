@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../firebase'
-import { doc, onSnapshot, updateDoc, arrayUnion, getDoc } from 'firebase/firestore'
+import { arrayUnion, doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import CharacterSheet from './CharacterSheet'
 import MasterPanel from './MasterPanel'
 import DiceRoller from './DiceRoller'
@@ -14,46 +14,75 @@ export default function Lobby() {
   const user = auth.currentUser
   const [roomData, setRoomData] = useState({ players: [], sceneTrackers: [], bgImage: '', creatorUid: '' })
   const [showMaster, setShowMaster] = useState(false)
-  const [bgImage, setBgImage] = useState('')
-  const [youtubeId, setYoutubeId] = useState('')
-  const [playersList, setPlayersList] = useState([])
-  const [isMaster, setIsMaster] = useState(false)
+  const [selectedUid, setSelectedUid] = useState(null)
+
+  const isMaster = roomData.creatorUid === user?.uid
+  const playersList = (roomData.players || []).filter(player => player.uid !== roomData.creatorUid && player.role !== 'master')
+  const visibleTrackers = (roomData.sceneTrackers || []).filter(tracker => !tracker.hidden)
 
   useEffect(() => {
     if (!roomId || !user) return
 
-    const unsub = onSnapshot(doc(db, 'rooms', roomId), async (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data()
-        setRoomData(data)
-        setBgImage(data.bgImage || '')
-        setPlayersList(data.players || [])
-        setIsMaster(data.creatorUid === user.uid)
+    const roomRef = doc(db, 'rooms', roomId)
+    const unsub = onSnapshot(roomRef, async (docSnap) => {
+      if (!docSnap.exists()) {
+        navigate('/rooms')
+        return
+      }
 
-        // Если пользователь ещё не в списке игроков — добавляем
-        const players = data.players || []
-        const alreadyIn = players.some(p => p.uid === user.uid)
-        if (!alreadyIn) {
-          await updateDoc(doc(db, 'rooms', roomId), {
-            players: arrayUnion({ uid: user.uid, email: user.email, role: 'player' })
-          })
-        }
+      const data = docSnap.data()
+      const kickedPlayerUids = data.kickedPlayerUids || []
+
+      if (kickedPlayerUids.includes(user.uid)) {
+        alert('Мастер удалил вас из этой комнаты')
+        navigate('/rooms')
+        return
+      }
+
+      setRoomData(data)
+
+      const userIsMaster = data.creatorUid === user.uid
+      const alreadyInRoom = (data.players || []).some(player => player.uid === user.uid)
+      if (!userIsMaster && !alreadyInRoom) {
+        await updateDoc(roomRef, {
+          players: arrayUnion({ uid: user.uid, email: user.email, role: 'player', characterName: user.email?.split('@')[0] || 'Аноним' })
+        })
       }
     })
-    return () => unsub()
-  }, [roomId, user])
 
-  const leaveRoom = () => {
-    navigate('/rooms')
+    return () => unsub()
+  }, [roomId, user, navigate])
+
+  useEffect(() => {
+    if (isMaster) {
+      setSelectedUid(currentUid => playersList.some(player => player.uid === currentUid) ? currentUid : (playersList[0]?.uid || null))
+    } else {
+      setSelectedUid(user?.uid || null)
+    }
+  }, [isMaster, playersList, user])
+
+  const leaveRoom = () => navigate('/rooms')
+  const getPlayerName = (player) => player.characterName || player.email?.split('@')[0] || 'Аноним'
+
+  const kickPlayer = async (player) => {
+    if (!isMaster || !window.confirm(`Удалить игрока «${getPlayerName(player)}» из комнаты?`)) return
+
+    await updateDoc(doc(db, 'rooms', roomId), {
+      players: (roomData.players || []).filter(item => item.uid !== player.uid),
+      kickedPlayerUids: arrayUnion(player.uid)
+    })
   }
 
-  // Получить имя пользователя
-  const getUserName = (email) => email ? email.split('@')[0] : 'Аноним'
+  const updateCharacterName = async (uid, characterName) => {
+    await updateDoc(doc(db, 'rooms', roomId), {
+      players: (roomData.players || []).map(player => player.uid === uid ? { ...player, characterName } : player)
+    })
+  }
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-cover bg-center bg-fixed transition-all duration-700"
-      style={{ backgroundImage: bgImage ? `url(${bgImage})` : 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' }}
+      style={{ backgroundImage: roomData.bgImage ? `url(${roomData.bgImage})` : 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' }}
     >
       <div className="min-h-screen bg-black/40 backdrop-blur-sm p-4">
         <div className="max-w-7xl mx-auto">
@@ -66,36 +95,61 @@ export default function Lobby() {
             </div>
             <div className="flex gap-3">
               {isMaster && (
-                <button
-                  onClick={() => setShowMaster(!showMaster)}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition"
-                >
+                <button onClick={() => setShowMaster(!showMaster)} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition">
                   {showMaster ? 'Скрыть панель мастера' : 'Панель мастера'}
                 </button>
               )}
-              <button
-                onClick={leaveRoom}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition"
-              >
-                Выйти
-              </button>
-              <button
-                onClick={() => signOut(auth)}
-                className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-white transition"
-              >
-                Выйти из аккаунта
-              </button>
+              <button onClick={leaveRoom} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition">Выйти</button>
+              <button onClick={() => signOut(auth)} className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-white transition">Выйти из аккаунта</button>
             </div>
           </div>
 
-          {/* Список игроков */}
-          <div className="mb-4 flex flex-wrap gap-2">
-            {playersList.map(p => (
-              <span key={p.uid} className="bg-gray-700 px-3 py-1 rounded-full text-sm text-white">
-                {p.role === 'master' ? '👑' : '🎲'} {getUserName(p.email)}
-              </span>
-            ))}
+          <div className="mb-6">
+            <p className="text-sm text-gray-300 mb-2">Персонажи</p>
+            <div className="flex flex-wrap gap-2">
+              {playersList.map(player => (
+                <div key={player.uid} className="relative">
+                  <button
+                    onClick={() => isMaster && setSelectedUid(player.uid)}
+                    className={`flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${selectedUid === player.uid ? 'border-purple-400 bg-purple-600 text-white' : 'border-gray-600 bg-gray-800 text-gray-200'} ${isMaster ? 'hover:border-purple-300' : 'cursor-default'}`}
+                    title={isMaster ? `Открыть лист «${getPlayerName(player)}»` : getPlayerName(player)}
+                  >
+                    <span>🎲</span>
+                    <span>{getPlayerName(player)}</span>
+                  </button>
+                  {isMaster && (
+                    <button
+                      onClick={() => kickPlayer(player)}
+                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs text-white hover:bg-red-500"
+                      title={`Удалить «${getPlayerName(player)}» из комнаты`}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {playersList.length === 0 && <span className="text-sm text-gray-400">Игроки ещё не присоединились</span>}
+            </div>
           </div>
+
+          {visibleTrackers.length > 0 && (
+            <div className="mb-6 rounded-2xl border border-purple-500/20 bg-gray-800/80 p-4 shadow-xl">
+              <h2 className="mb-3 text-xl font-bold text-white">🎯 Трекеры сцены</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleTrackers.map(tracker => (
+                  <div key={tracker.id} className="rounded-lg bg-gray-700 p-3">
+                    <div className="mb-2 flex justify-between text-sm text-white">
+                      <span>{tracker.name}</span>
+                      <span>{tracker.value}/{tracker.max}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-600">
+                      <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${tracker.max ? (tracker.value / tracker.max) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {youtubeId && (
             <div className="mb-6">
@@ -105,7 +159,14 @@ export default function Lobby() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              <CharacterSheet roomId={roomId} userId={user?.uid} isMaster={isMaster} players={playersList} />
+              <CharacterSheet
+                roomId={roomId}
+                userId={user?.uid}
+                isMaster={isMaster}
+                players={playersList}
+                selectedUid={selectedUid}
+                onCharacterNameChange={updateCharacterName}
+              />
             </div>
             <div className="lg:col-span-1 space-y-4">
               <DiceRoller />

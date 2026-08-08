@@ -14,6 +14,7 @@ export default function Lobby() {
   const user = auth.currentUser
   const [roomData, setRoomData] = useState({ players: [], sceneTrackers: [], bgImage: '', creatorUid: '' })
   const [showMaster, setShowMaster] = useState(false)
+  const [youtubeId] = useState('')
   const [selectedUid, setSelectedUid] = useState(null)
 
   const isMaster = roomData.creatorUid === user?.uid

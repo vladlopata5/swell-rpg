@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebase'
 import Login from './components/Login'
+import RoomSelector from './components/RoomSelector'
 import Lobby from './components/Lobby'
 
 function App() {
@@ -28,8 +29,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={user ? <Navigate to="/lobby" /> : <Login />} />
-        <Route path="/lobby" element={user ? <Lobby /> : <Navigate to="/" />} />
+        <Route path="/" element={user ? <Navigate to="/rooms" /> : <Login />} />
+        <Route path="/rooms" element={user ? <RoomSelector /> : <Navigate to="/" />} />
+        <Route path="/lobby/:roomId" element={user ? <Lobby /> : <Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
   )

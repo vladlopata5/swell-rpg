@@ -149,15 +149,15 @@ export default function CharacterSheet({ roomId, userId, isMaster, selectedUid, 
                     <label>ОС <input type="number" value={character.os} onFocus={() => setActiveField('os')} onChange={(e) => updateField('os', +e.target.value)} className="w-full px-2 py-1 bg-gray-700 rounded text-white" /></label>
                   </div>
                   <div onFocus={() => setActiveField('aspects')}>
-                    <p className="mb-1 font-semibold">Аспекты</p>
+                    <p className="mb-2 font-semibold">Аспекты</p>
+                    <div className="mb-3 flex flex-wrap gap-2">{(character.aspects || []).map((aspect, index) => <span key={index} className="rounded-full bg-purple-700 px-3 py-1 text-sm text-white">{aspect}<button onClick={() => removeAspect(index)} className="ml-2 text-purple-200 hover:text-white">×</button></span>)}</div>
                     <div className="flex gap-2"><input value={aspectDraft} onChange={(e) => setAspectDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addAspect()} placeholder="Новый аспект" className="flex-1 px-3 py-2 bg-gray-700 rounded text-white" /><button onClick={() => addAspect()} className="rounded bg-green-600 px-3 text-white hover:bg-green-700">Добавить</button></div>
-                    <div className="mt-2 flex flex-wrap gap-2">{(character.aspects || []).map((aspect, index) => <span key={index} className="rounded-full bg-purple-700 px-3 py-1 text-sm text-white">{aspect}<button onClick={() => removeAspect(index)} className="ml-2 text-purple-200 hover:text-white">×</button></span>)}</div>
+                    <div className="mt-4 border-t border-purple-500/30 pt-3"><p className="mb-2 font-semibold text-purple-200">Примеры аспектов</p><div className="flex flex-wrap gap-1">{ASPECT_EXAMPLES.map(aspect => <button key={aspect} onClick={() => addAspect(aspect)} className="rounded bg-gray-700 px-2 py-1 text-left text-xs hover:bg-purple-700">{aspect}</button>)}</div></div>
                   </div>
                   <button onClick={handleSave} className="w-full py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-bold">{isInitialSetup ? 'Создать персонажа и войти' : 'Сохранить'}</button>
                 </div>
                 <aside className="rounded-xl border border-purple-500/30 bg-purple-950/30 p-4 text-sm text-gray-200">
                   {renderRecommendation()}
-                  <div className="mt-4 border-t border-purple-500/30 pt-3"><p className="mb-2 font-semibold text-purple-200">Примеры аспектов</p><div className="flex flex-wrap gap-1">{ASPECT_EXAMPLES.map(aspect => <button key={aspect} onClick={() => addAspect(aspect)} className="rounded bg-gray-700 px-2 py-1 text-left text-xs hover:bg-purple-700">{aspect}</button>)}</div></div>
                 </aside>
               </div>
             ) : (

@@ -7,6 +7,7 @@ import CharacterSheet from './CharacterSheet'
 import MasterPanel from './MasterPanel'
 import DiceRoller from './DiceRoller'
 import YouTube from 'react-youtube'
+import { deleteRoomWithCharacters } from '../utils/roomCleanup'
 
 export default function Lobby() {
   const { roomId } = useParams()
@@ -86,6 +87,12 @@ export default function Lobby() {
     })
   }, [roomData.players, roomId])
 
+  const deleteRoom = async () => {
+    if (!isMaster || !window.confirm('Удалить эту комнату и все листы персонажей? Это действие нельзя отменить.')) return
+    await deleteRoomWithCharacters(roomId)
+    navigate('/rooms')
+  }
+
   const saveRoomName = async () => {
     const name = roomNameDraft.trim()
     if (!name) return
@@ -161,7 +168,7 @@ export default function Lobby() {
             </div>
             <div className="lg:col-span-1 space-y-4">
               <DiceRoller />
-              {showMaster && isMaster && <MasterPanel roomId={roomId} />}
+              {showMaster && isMaster && <MasterPanel roomId={roomId} onDeleteRoom={deleteRoom} />}
             </div>
           </div>
         </div>

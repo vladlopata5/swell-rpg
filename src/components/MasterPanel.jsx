@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
-export default function MasterPanel({ roomId }) {
+export default function MasterPanel({ roomId, onDeleteRoom }) {
   const [trackers, setTrackers] = useState([])
   const [newTracker, setNewTracker] = useState({ name: '', max: 10, hidden: false })
 
@@ -72,6 +72,9 @@ export default function MasterPanel({ roomId }) {
           <label className="text-sm text-gray-300 flex items-center"><input type="checkbox" checked={newTracker.hidden} onChange={(e) => setNewTracker({ ...newTracker, hidden: e.target.checked })} className="mr-1" /> Скрытый</label>
           <button onClick={addTracker} className="px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">+</button>
         </div>
+      </div>
+      <div className="mt-6 border-t border-red-500/30 pt-4">
+        <button onClick={onDeleteRoom} className="w-full rounded bg-red-800 px-4 py-2 font-semibold text-white hover:bg-red-700">Удалить комнату навсегда</button>
       </div>
     </div>
   )

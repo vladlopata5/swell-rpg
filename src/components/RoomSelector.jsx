@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, getDocs, addDoc, doc, getDoc } from 'firebase/firestore'
 import { db, auth } from '../firebase'
+import DebugPanel from './DebugPanel'
 
 export default function RoomSelector() {
   const [rooms, setRooms] = useState([])
@@ -112,6 +113,7 @@ export default function RoomSelector() {
             </ul>
           )}
         </div>
+        <DebugPanel user={user} />
       </div>
     </div>
   )

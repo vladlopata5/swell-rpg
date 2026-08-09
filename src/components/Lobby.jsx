@@ -27,6 +27,7 @@ export default function Lobby() {
   )
   const visibleTrackers = (roomData.sceneTrackers || []).filter(tracker => !tracker.hidden)
   const selectedPlayer = playersList.find(player => player.uid === selectedUid) || null
+  const needsCharacterSetup = !isMaster && !playersList.some(player => player.uid === user?.uid)
 
   useEffect(() => {
     if (!roomId || !user) return
@@ -46,13 +47,6 @@ export default function Lobby() {
       }
 
       setRoomData(data)
-      const userIsMaster = data.creatorUid === user.uid
-      const alreadyInRoom = (data.players || []).some(player => player.uid === user.uid)
-      if (!userIsMaster && !alreadyInRoom) {
-        await updateDoc(roomRef, {
-          players: arrayUnion({ uid: user.uid, email: user.email, role: 'player', characterName: user.email?.split('@')[0] || 'Аноним' })
-        })
-      }
     })
 
     return () => unsub()
@@ -86,6 +80,12 @@ export default function Lobby() {
       players: (roomData.players || []).map(player => player.uid === uid ? { ...player, characterName } : player)
     })
   }, [roomData.players, roomId])
+
+  const completeCharacterSetup = async (characterName) => {
+    await updateDoc(doc(db, 'rooms', roomId), {
+      players: arrayUnion({ uid: user.uid, email: user.email, role: 'player', characterName })
+    })
+  }
 
   const deleteRoom = async () => {
     if (!isMaster || !window.confirm('Удалить эту комнату и все листы персонажей? Это действие нельзя отменить.')) return
@@ -164,7 +164,7 @@ export default function Lobby() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              <CharacterSheet roomId={roomId} userId={user?.uid} isMaster={isMaster} selectedUid={selectedUid} selectedPlayer={selectedPlayer} onCharacterNameChange={updateCharacterName} />
+              <CharacterSheet roomId={roomId} userId={user?.uid} isMaster={isMaster} selectedUid={selectedUid} selectedPlayer={selectedPlayer || (needsCharacterSetup ? { email: user?.email } : null)} isInitialSetup={needsCharacterSetup} onCharacterNameChange={updateCharacterName} onCharacterCreated={completeCharacterSetup} />
             </div>
             <div className="lg:col-span-1 space-y-4">
               <DiceRoller />

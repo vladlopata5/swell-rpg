@@ -11,8 +11,8 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user)
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser)
       setLoading(false)
     })
     return () => unsubscribe()
@@ -29,9 +29,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={user ? <Navigate to="/rooms" /> : <Login />} />
-        <Route path="/rooms" element={user ? <RoomSelector /> : <Navigate to="/" />} />
-        <Route path="/lobby/:roomId" element={user ? <Lobby /> : <Navigate to="/" />} />
+        <Route path="/" element={user ? <Navigate to="/rooms" replace /> : <Login />} />
+        <Route path="/rooms" element={user ? <RoomSelector /> : <Navigate to="/" replace />} />
+        <Route path="/lobby/:roomId" element={user ? <Lobby /> : <Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )
